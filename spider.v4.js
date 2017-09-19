@@ -9,20 +9,26 @@ function spiderLinks(currentUrl, body, nesting, callback) {
 		return process.nextTick(callback);
 	}
 
-	let links = utilities.getPageLinks(currentUrl, body);  //[1]
-	function iterate(index) {
-		if(index === links.length) {
+	const links = utilities.getPageLinks(currentUrl, body);  //[1]
+	if(links.length === 0) {
+		return process.nextTick(callback);
+	}
+
+	let completed = 0, hasErrors = false;
+
+	function done(err) {
+		if(err) {
+			hasErrors = true;
+			return callback(err);
+		}
+		if(++completed === links.length && !hasErrors) {
 			return callback();
 		}
-
-		spider(links[index], nesting - 1, function(err) {
-			if(err) {
-				return callback(err);
-			}
-			iterate(index + 1);
-		});
 	}
-	iterate(0);
+
+	links.forEach(function(link) {
+		spider(link, nesting - 1, done);
+	});
 }
 
 function saveFile(filename, contents, callback) {
@@ -50,7 +56,13 @@ function download(url, filename, callback) {
 	});
 }
 
+let spidering = new Map();
 function spider(url, nesting, callback) {
+	if(spidering.has(url)) {
+		return process.nextTick(callback);
+	}
+	spidering.set(url, true);
+
 	const filename = utilities.urlToFilename(url);
 	fs.readFile(filename, 'utf8', function(err, body) {
 		if(err) {
@@ -70,7 +82,7 @@ function spider(url, nesting, callback) {
 	});
 }
 
-spider(process.argv[2]||'https://vnexpress.net/', 1, (err) => {
+spider(process.argv[2], 1, (err) => {
 	if(err) {
 		console.log(err);
 		process.exit();
